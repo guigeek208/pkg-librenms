@@ -1,0 +1,17 @@
+#!/bin/bash
+case $1 in
+    purge)
+        echo "PURGING CONFIG FILES"
+        rm -rf /opt/librenms
+        echo PURGE | debconf-communicate librenms
+        userdel librenms
+        groupdel librenms
+    ;;
+    upgrade)
+        echo "postrm upgrade"
+    ;;
+    *)
+        echo "Unrecognized postrm argument '$1'"
+        ;;
+esac
+exit 0

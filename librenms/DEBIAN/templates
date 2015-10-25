@@ -1,0 +1,15 @@
+Template: librenms/sqlpassword
+Type: password
+Default:
+Description: What is the MySQL password for 'ROOT' user?
+
+Template: librenms/db_offline
+Type: note
+Description: Can't connect to mysql server
+
+Template: librenms/db_exists
+Type: boolean
+Default:
+Description: Database exists!
+ Do you want to override it ?
+

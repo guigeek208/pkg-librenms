@@ -1,0 +1,18 @@
+#!/bin/bash
+case $1 in
+    install)
+        echo "INSTALLATION"
+        useradd librenms -d /opt/librenms -M -r
+		usermod -a -G librenms www-data
+        ;;
+    upgrade)
+        echo "UPGRADE from $2"
+        ;;
+    abort-upgrade|abort-remove|abort-deconfigure)
+        # Do nothing
+        ;;
+    *)
+        echo "Unrecognized postinst argument '$1'"
+        ;;
+esac
+exit 0

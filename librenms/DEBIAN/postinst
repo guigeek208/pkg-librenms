@@ -1,0 +1,104 @@
+#!/bin/bash
+BACKUP_HOME=/home/backup
+USER_HOME=/home/citizencam
+OUT=/tmp/librenms_out.log
+LOG=/tmp/librenms_errors.log
+PATH_LIBRENMS=/opt/librenms
+DATABASE=librenms
+
+set -e
+. /usr/share/debconf/confmodule
+
+configLibreNMS() {
+    db_get librenms/sqlpassword
+    PASSWORD_DB_ROOT=$RET
+    PASSWORD_LIBRENMS=$(makepasswd)
+    MYSQL_CMD="SHOW databases;"
+    MYSQL_RES=$(echo $MYSQL_CMD | mysql -uroot -p${PASSWORD_DB_ROOT} | grep ${DATABASE} || true)
+    if [[ $MYSQL_RES == "librenms" ]]; then
+        db_input critical librenms/db_exists || true
+        db_go
+        db_get librenms/db_exists
+        if [ $RET == true ]; then
+            echo "Drop database"
+            echo "DROP DATABASE ${DATABASE};" | mysql -uroot -p${PASSWORD_DB_ROOT} >>$OUT 2>>$LOG
+        else
+            break
+            echo "Installation failed"
+        fi
+    fi
+    echo "Create database"
+    MYSQL_CMD="CREATE DATABASE ${DATABASE} DEFAULT CHARACTER SET utf8 COLLATE utf8_general_ci;\
+                GRANT ALL ON ${DATABASE}.* to librenms@localhost identified by '${PASSWORD_LIBRENMS}';\
+                flush privileges;"
+    MYSQL_RES=$(echo $MYSQL_CMD | mysql -uroot -p${PASSWORD_DB_ROOT} 2>&1 >>$OUT)
+    RES=$?
+    until [ $RES -eq 0 ]
+    do
+	    db_input high librenms/sqlpassword || true
+      	db_go
+        db_get librenms/sqlpassword
+	    PASSWORD_DB_ROOT=$RET
+        MYSQL_CMD="CREATE DATABASE ${DATABASE} DEFAULT CHARACTER SET utf8 COLLATE utf8_general_ci;\
+                GRANT ALL ON ${DATABASE}.* to librenms@localhost identified by '${PASSWORD_LIBRENMS}';\
+                flush privileges;"
+        MYSQL_RES=$(echo $MYSQL_CMD | mysql -uroot -p${PASSWORD_DB_ROOT} 2>&1 >>$OUT)
+        RES=$?
+    done
+
+	mkdir $PATH_LIBRENMS/rrd $PATH_LIBRENMS/logs
+	chown -R librenms:librenms $PATH_LIBRENMS
+	chown www-data:www-data $PATH_LIBRENMS/logs
+	chmod 775 $PATH_LIBRENMS/rrd
+	grep librenms /etc/apache2/sites-enabled/*
+	if [[ $? != 0 ]]; then
+		echo '<VirtualHost *:80>
+	DocumentRoot /opt/librenms/html/
+	CustomLog /opt/librenms/logs/access_log combined
+	ErrorLog /opt/librenms/logs/error_log
+	AllowEncodedSlashes On
+	<Directory "/opt/librenms/html/">
+		AllowOverride All
+		Options FollowSymLinks MultiViews
+		<IfVersion < 2.4>
+			Allow from all
+		</IfVersion>
+		<IfVersion >= 2.4>
+			Require all granted
+		</IfVersion>
+	</Directory>
+</VirtualHost>' > /etc/apache2/sites-available/librenms.conf
+		a2ensite librenms.conf
+		a2dissite 000-default
+		php5enmod mcrypt
+		a2enmod rewrite
+	fi
+	service apache2 reload
+	cp /opt/librenms/config.php.default /opt/librenms/config.php
+	sed "s/$config\['db_user'\] = .*/$config['db_user'] = 'librenms';/" -i $PATH_LIBRENMS/config.php
+	sed "s/$config\['db_pass'\] = .*/$config['db_pass'] = '$PASSWORD_LIBRENMS';/" -i $PATH_LIBRENMS/config.php
+	cd $PATH_LIBRENMS && php build-base.php
+	cd $PATH_LIBRENMS && php adduser.php admin admin 10
+}
+
+echo "" > $OUT
+echo "" > $LOG
+
+case $1 in
+    configure)
+        if [ "$2" = "" ]; then
+            echo "INSTALLATION"
+            configLibreNMS || true
+        fi
+        db_stop
+        exit 0
+        ;;
+    abort-upgrade|abort-remove|abort-deconfigure)
+        # Do nothing
+        exit 0
+        ;;
+    *)
+        echo "Unrecognized postinst argument '$1'"
+        exit 1
+    ;;
+esac

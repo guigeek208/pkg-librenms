@@ -1,0 +1,33 @@
+#!/bin/sh
+set -e
+. /usr/share/debconf/confmodule
+
+if [ "$1" = "configure" ] && [ -z "$2" ] || [ "$1" = "reconfigure" ]; then
+    STATE=1
+    while [ "$STATE" != 2 ]; do
+        case "$STATE" in
+        1)
+            # SQL Password
+            RET=""
+            db_input high librenms/sqlpassword || true
+            db_go
+            db_get librenms/sqlpassword
+            echo $RET
+            echo "" | mysql -u root -p$RET && res=$?|| true
+            if [ -z "$res" ]; then
+                db_input critical librenms/db_offline
+                db_set librenms/sqlpassword ""
+            else
+                if [ "$res" != "0" ]; then
+                    db_set librenms/sqlpassword ""
+                    db_fset librenms/sqlpassword seen false
+                    db_fset librenms/db_offline seen false
+                    db_input critical librenms/db_offline
+                else 
+                    STATE=$(($STATE + 1))
+                fi
+            fi
+        ;;
+        esac
+  done
+fi
