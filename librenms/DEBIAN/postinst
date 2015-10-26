@@ -79,6 +79,7 @@ configLibreNMS() {
 	sed "s/$config\['db_pass'\] = .*/$config['db_pass'] = '$PASSWORD_LIBRENMS';/" -i $PATH_LIBRENMS/config.php
 	cd $PATH_LIBRENMS && php build-base.php
 	cd $PATH_LIBRENMS && php adduser.php admin admin 10
+	cp $PATH_LIBRENMS/librenms.nonroot.cron /etc/cron.d/librenms
 }
 
 echo "" > $OUT
